@@ -1,0 +1,98 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: capacity
+      POSTGRES_PASSWORD: capacity
+      POSTGRES_DB: capacity
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U capacity -d capacity"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        TARGET: server
+    ports:
+      - "8080:8080"
+    environment:
+      HTTP_ADDR: ":8080"
+      POSTGRES_DSN: postgres://capacity:capacity@postgres:5432/capacity?sslmode=disable
+      REDIS_ADDR: redis:6379
+      MIGRATIONS_PATH: /migrations
+      RESERVE_TTL: 15m
+      SWEEPER_INTERVAL: 30s
+    volumes:
+      - ../migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  sweeper:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        TARGET: sweeper
+    ports:
+      - "8081:8081"
+    environment:
+      POSTGRES_DSN: postgres://capacity:capacity@postgres:5432/capacity?sslmode=disable
+      REDIS_ADDR: redis:6379
+      MIGRATIONS_PATH: /migrations
+      SWEEPER_INTERVAL: 15s
+      METRICS_ADDR: ":8081"
+    volumes:
+      - ../migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+      - sweeper
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
