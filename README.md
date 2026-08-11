@@ -7,11 +7,12 @@
 4. [Domain Models](#domain-models)
 5. [Use Cases](#use-cases)
 6. [Software Architecture](#software-architecture)
-7. [User Stories](#user-stories)
-8. [Prerequisites and Install](#prerequisites-and-install)
-9. [Tests](#tests)
-10. [APIs and Endpoints](#apis-and-endpoints)
-11. [Known Issues and Limitations](#known-issues-and-limitations)
+7. [Observability, Logging, and Tracing](#observability-logging-and-tracing)
+8. [User Stories](#user-stories)
+9. [Prerequisites and Install](#prerequisites-and-install)
+10. [Tests](#tests)
+11. [APIs and Endpoints](#apis-and-endpoints)
+12. [Known Issues and Limitations](#known-issues-and-limitations)
 
 ## Summary
 
@@ -291,6 +292,77 @@ Redis is used for performance, not correctness:
 - Short TTL cache for `GET /v1/capacity` only
 
 If Redis is unavailable, the service still functions via Postgres.
+
+## Observability, Logging, and Tracing
+
+The service is instrumented so operators can answer three questions quickly:
+
+1. Is the service and its critical dependencies healthy?
+2. What is the end-to-end outcome of a request (success/reject/expire/cancel) and why?
+3. Are business-level funnel and capacity signals changing over time?
+
+### Request correlation (`X-Request-Id`)
+
+All HTTP responses include a request correlation header and the logging layer uses it:
+
+- Inbound: if a client sends `X-Request-Id`, it is used
+- Otherwise: the middleware generates one
+- Returned: every response includes `X-Request-Id` so the caller can send it back for support/debugging
+
+This same request id is also reflected in the API-level logging fields and helps line up API logs with durable audit events.
+
+### Structured logging (what is logged)
+
+HTTP handlers run behind `chi` middleware in `internal/observability`. Each request emits JSON logs containing (at minimum):
+
+- `request_id`
+- `customer_id` (when known/available)
+- `method`
+- `route`
+- `status_code`
+- `latency_ms`
+- `error_reason` (on 4xx/5xx, aligned with the service’s domain reason codes)
+
+### Metrics (what you can monitor)
+
+The `/metrics` endpoint exposes Prometheus metrics, including:
+
+**HTTP metrics**
+
+- `http_requests_total{method,route,status}` counter
+- `http_request_duration_seconds{method,route}` histogram
+- `http_requests_in_flight` gauge
+
+**Business funnel metrics**
+
+- `reservation_attempts_total{result}` (reserved/rejected funnel)
+- `reservation_rejections_total{reason}` (rejection mix)
+- `reservation_confirmations_total{product}` (conversion to confirmed/dedicated)
+- `reservation_cancellations_total`
+- `reservation_expirations_total{trigger=sweeper}`
+- `reservation_extensions_total`
+- `pool_available_ratio{pool}` (capacity headroom)
+- `quota_utilization_ratio{resource_kind}`
+- `sweeper_runs_total{lock_acquired}` (single-actor proof)
+- `sweeper_expired_holds_total` (post-recovery cleanup volume)
+
+### Durable audit trail (how to trace the “why”)
+
+For every state transition, the service writes a durable row to `request_events` (via the repository layer).
+This is the system of record for explaining outcomes after retries, timeouts, or dependency outages.
+
+Typical operator flow:
+
+- Find the API request correlation id (`X-Request-Id`)
+- Call `GET /v1/requests/{id}` (or inspect `capacity_requests` / `request_events` in Postgres)
+- Review the ordered `request_events` timeline to see `reserved`, `rejected`, `confirmed`, `expired`, and any human-readable `reason` details
+
+### Dependency health
+
+Readiness uses:
+
+- `GET /v1/ready`: checks Postgres reachability (critical) and Redis ping (non-critical)
+- The HTTP layer reports dependency status via a gauge used by dashboards/alerts
 
 ## User Stories
 
