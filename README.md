@@ -305,13 +305,13 @@ If Redis is unavailable, the service still functions via Postgres.
 
 ```mermaid
 flowchart LR
-  U1["Customer Operator\n(Story 1)"] -->|Reserve (POST /v1/requests)| URS["Capacity Requests"]
+  U1["Customer Operator\n(Story 1)"] -->|Reserve| URS["Capacity Requests"]
   U2["Integration Service\n(Story 2)"] -->|Idempotent retry| URS
-  U3["Capacity Analyst\n(Story 3)"] -->|View capacity (GET /v1/capacity)| CAP["Capacity View"]
-  U4["Provisioning Orchestrator\n(Story 4)"] -->|Confirm (POST /v1/requests/{id}/confirm)| CONF["Confirm + Dedicate"]
-  U5["Customer\n(Story 5)"] -->|Cancel (POST /v1/requests/{id}/cancel)| CANCEL["Cancel + Release"]
-  U6["Scheduler\n(Story 6)"] -->|Extend (POST /v1/requests/{id}/extend)| EXT["Extend TTL (capped)"]
-  U7["Support Engineer\n(Story 7)"] -->|Inspect request (GET /v1/requests/{id})| INSPECT["Request details + events"]
+  U3["Capacity Analyst\n(Story 3)"] -->|View capacity| CAP["Capacity View"]
+  U4["Provisioning Orchestrator\n(Story 4)"] -->|Confirm + dedicate| CONF["Confirm + Dedicate"]
+  U5["Customer\n(Story 5)"] -->|Cancel + release| CANCEL["Cancel + Release"]
+  U6["Scheduler\n(Story 6)"] -->|Extend TTL| EXT["Extend TTL (capped)"]
+  U7["Support Engineer\n(Story 7)"] -->|Inspect request| INSPECT["Request details + events"]
   U8["Operator\n(Story 8)"] -->|Expiry reconciliation| SWEEP["Sweeper + Metrics + Audit"]
 ```
 
@@ -569,4 +569,4 @@ This project was built with assistance across the following areas:
 - Generating Prometheus/Grafana assets, specifically:
   - Prometheus/Grafana metric dashboard JSON (dashboards), not the metrics themselves
 - The `deploy` section related to Docker Compose (container/service configuration and run instructions)
-
+- Researching about the cloud resource management, open stack nova, neutron, ...
