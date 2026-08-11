@@ -13,6 +13,7 @@
 10. [Tests](#tests)
 11. [APIs and Endpoints](#apis-and-endpoints)
 12. [Known Issues and Limitations](#known-issues-and-limitations)
+13. [What I developed with help of AI](#what-i-developed-with-help-of-ai)
 
 ## Summary
 
