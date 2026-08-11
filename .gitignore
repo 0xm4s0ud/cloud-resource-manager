@@ -7,7 +7,7 @@
 coverage.*
 
 # Go
-/vendor/
+# /vendor/
 
 # IDE / OS
 .idea/
